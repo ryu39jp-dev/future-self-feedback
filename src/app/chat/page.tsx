@@ -1,31 +1,41 @@
-"use client"; // ← 「ユーザーが操作する画面だよ」という合図
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
 
 export default function ChatPage() {
-  // 入力された文字を「状態（State）」として保存する箱
   const [inputText, setInputText] = useState("");
+  // メッセージのリストを保存する箱（初期値は空の配列 [] ）
+  const [messages, setMessages] = useState<string[]>([]);
 
   const handleSend = () => {
     if (!inputText) return;
-    alert(`未来の自分へ: ${inputText}と送ったぞ`);
-    setInputText(""); // 送信したら中身を空にする
+
+    // 今までのメッセージに、新しい入力内容を追加して新しい配列を作る
+    setMessages([...messages, inputText]);
+    
+    // 入力欄を空にする
+    setInputText("");
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 p-4">
-      {/* ヘッダー */}
+    <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       <div className="flex items-center mb-4">
         <Link href="/" className="text-blue-500 mr-4">← 戻る</Link>
         <h1 className="text-xl font-bold">未来の自分へのメッセージ</h1>
       </div>
 
-      {/* メッセージ表示エリア（今は空っぽ） */}
-      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto">
-        <p className="text-gray-400 text-center mt-10">
-          未来の自分に、今の悩みを相談してみよう。
-        </p>
+      {/* メッセージ表示エリア */}
+      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-2">
+        {messages.length === 0 ? (
+          <p className="text-gray-400 text-center mt-10">メッセージを送ってみよう！</p>
+        ) : (
+          messages.map((msg, index) => (
+            <div key={index} className="self-end bg-blue-500 text-white p-3 rounded-2xl rounded-tr-none max-w-[80%]">
+              {msg}
+            </div>
+          ))
+        )}
       </div>
 
       {/* 入力フォーム */}
@@ -34,8 +44,9 @@ export default function ChatPage() {
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()} // Enterキーでも送れるように
           placeholder="メッセージを入力..."
-          className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+          className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           onClick={handleSend}
