@@ -5,43 +5,35 @@ import Link from "next/link";
 
 export default function ChatPage() {
   const [inputText, setInputText] = useState("");
-  const [messages, setMessages] = useState<{ text: string; tag: string }[]>([]);
+  // 型定義に sender を追加して、エラーを防ぐ
+  const [messages, setMessages] = useState<{ text: string; tag: string; sender: string }[]>([]);
   const [selectedTag, setSelectedTag] = useState("💻");
 
-  // 初期値を空にして、LocalStorageの読み込みを待つ
   const [targetDateStr, setTargetDateStr] = useState("");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
 
-  // 1. ページに来た瞬間に一度だけLocalStorageを確認する
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
     if (savedDate) {
       setTargetDateStr(savedDate);
     } else {
-      setTargetDateStr("2026-12-31"); // 保存がなければデフォルト
+      setTargetDateStr("2026-12-31");
     }
   }, []);
 
-  // 2. targetDateStr が決まったら保存 & 計算する
   useEffect(() => {
-    if (!targetDateStr) return; // まだ読み込み中なら何もしない
-
+    if (!targetDateStr) return;
     localStorage.setItem("myTargetDate", targetDateStr);
-
     const calculateDays = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const target = new Date(targetDateStr);
-      
       const diffTime = target.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       setDaysLeft(diffDays);
     };
-
     calculateDays();
   }, [targetDateStr]);
-
-  // -------------------------
 
   const tags = [
     { icon: "💻", label: "開発" },
@@ -51,12 +43,47 @@ export default function ChatPage() {
     { icon: "😴", label: "眠い" },
   ];
 
-  const handleSend = () => {
+  const handleSend = async () => { // async を追加
     if (!inputText) return;
-    setMessages([...messages, { text: inputText, tag: selectedTag }]);
-    setInputText("");
-  };
 
+    // 1. ユーザーのメッセージを画面に表示
+    const userMsg = { text: inputText, tag: selectedTag, sender: "me" };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInputText("");
+
+    // --- ここから AWS Lambda 呼び出し ---
+    try {
+      const endpoint = "https://sdgfilub3j.execute-api.ap-southeast-2.amazonaws.com/default/future-self-feedback";
+      
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: inputText,      // 報告内容
+          tag: selectedTag,    // 選択された絵文字
+          days_left: daysLeft  // 残り日数
+        }),
+      });
+
+      if (!response.ok) throw new Error("通信エラー");
+
+      const data = await response.json();
+      
+      // 2. AIからの本物の「喝」を画面に表示
+      const aiMsg = { text: data.response, tag: "🤖", sender: "ai" };
+      setMessages([...newMessages, aiMsg]);
+
+    } catch (error) {
+      console.error("Error:", error);
+      // エラー時のフォールバック
+      const errorMsg = { text: "未来の自分との通信に失敗した。今は自力で耐えろ。", tag: "⚠️", sender: "ai" };
+      setMessages([...newMessages, errorMsg]);
+    }
+  };
+  
   return (
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       {/* 目標設定エリア */}
@@ -94,19 +121,26 @@ export default function ChatPage() {
           </div>
         ) : (
           messages.map((msg, index) => (
-            <div key={index} className="self-end flex flex-col items-end">
-              <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full text-gray-500 mb-1 border border-gray-200">
-                {msg.tag}
+            <div 
+              key={index} 
+              className={`flex flex-col ${msg.sender === "ai" ? "items-start" : "items-end"}`}
+            >
+              <span className="text-[10px] text-gray-400 mb-1 font-bold">
+                {msg.sender === "ai" ? "🤖 FUTURE ME" : msg.tag}
               </span>
-              <div className="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-none shadow-sm text-sm">
+              <div className={`p-3 rounded-2xl max-w-[80%] text-sm shadow-sm ${
+                msg.sender === "ai" 
+                  ? "bg-gray-800 text-white rounded-tl-none" 
+                  : "bg-blue-600 text-white rounded-tr-none"
+              }`}>
                 {msg.text}
               </div>
             </div>
           ))
         )}
-      </div>
+      </div> {/* ← ここでチャット表示エリアの div を閉じる必要がありました */}
 
-      {/* タグ選択・入力フォーム（前回と同じ） */}
+      {/* タグ選択 */}
       <div className="flex gap-2 mb-3 justify-center">
         {tags.map((t) => (
           <button
@@ -124,6 +158,7 @@ export default function ChatPage() {
         ))}
       </div>
 
+      {/* 入力フォーム */}
       <div className="flex gap-2 bg-white p-2 rounded-xl shadow-lg border border-gray-200">
         <input
           type="text"
