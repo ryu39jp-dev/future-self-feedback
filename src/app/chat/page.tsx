@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import ReactMarkdown from 'react-markdown';
 
 export default function ChatPage() {
   const [inputText, setInputText] = useState("");
-  // 型定義に sender を追加して、エラーを防ぐ
   const [messages, setMessages] = useState<{ text: string; tag: string; sender: string }[]>([]);
   const [selectedTag, setSelectedTag] = useState("💻");
 
@@ -43,16 +43,14 @@ export default function ChatPage() {
     { icon: "😴", label: "眠い" },
   ];
 
-  const handleSend = async () => { // async を追加
+  const handleSend = async () => {
     if (!inputText) return;
 
-    // 1. ユーザーのメッセージを画面に表示
     const userMsg = { text: inputText, tag: selectedTag, sender: "me" };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInputText("");
 
-    // --- ここから AWS Lambda 呼び出し ---
     try {
       const endpoint = "https://sdgfilub3j.execute-api.ap-southeast-2.amazonaws.com/default/future-self-feedback";
       
@@ -62,9 +60,9 @@ export default function ChatPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: inputText,      // 報告内容
-          tag: selectedTag,    // 選択された絵文字
-          days_left: daysLeft  // 残り日数
+          text: inputText,
+          tag: selectedTag,
+          days_left: daysLeft
         }),
       });
 
@@ -72,18 +70,16 @@ export default function ChatPage() {
 
       const data = await response.json();
       
-      // 2. AIからの本物の「喝」を画面に表示
       const aiMsg = { text: data.response, tag: "🤖", sender: "ai" };
       setMessages([...newMessages, aiMsg]);
 
     } catch (error) {
       console.error("Error:", error);
-      // エラー時のフォールバック
       const errorMsg = { text: "未来の自分との通信に失敗した。今は自力で耐えろ。", tag: "⚠️", sender: "ai" };
       setMessages([...newMessages, errorMsg]);
     }
   };
-  
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       {/* 目標設定エリア */}
@@ -96,7 +92,7 @@ export default function ChatPage() {
               type="date" 
               value={targetDateStr}
               onChange={(e) => setTargetDateStr(e.target.value)}
-              className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500"
+              className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500 text-black bg-transparent"
             />
           </div>
         </div>
@@ -130,15 +126,24 @@ export default function ChatPage() {
               </span>
               <div className={`p-3 rounded-2xl max-w-[80%] text-sm shadow-sm ${
                 msg.sender === "ai" 
-                  ? "bg-gray-800 text-white rounded-tl-none" 
+                  ? "bg-gray-800 text-white rounded-tl-none prose prose-invert prose-sm" 
                   : "bg-blue-600 text-white rounded-tr-none"
               }`}>
-                {msg.text}
+                {msg.sender === "ai" ? (
+                  /* ReactMarkdown に className を渡さず、外側の div で制御 */
+                  <div className="whitespace-pre-wrap leading-relaxed">
+                    <ReactMarkdown>
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                )}
               </div>
             </div>
           ))
         )}
-      </div> {/* ← ここでチャット表示エリアの div を閉じる必要がありました */}
+      </div>
 
       {/* タグ選択 */}
       <div className="flex gap-2 mb-3 justify-center">
@@ -166,7 +171,7 @@ export default function ChatPage() {
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           placeholder="今日の積み上げを報告..."
-          className="flex-1 p-2 text-sm focus:outline-none"
+          className="flex-1 p-2 text-sm focus:outline-none text-black bg-transparent"
         />
         <button
           onClick={handleSend}
