@@ -11,20 +11,22 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
 
   const [targetDateStr, setTargetDateStr] = useState("");
+  const [targetGoal, setTargetGoal] = useState(""); // 1. 目標テキスト用の状態
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
 
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
-    if (savedDate) {
-      setTargetDateStr(savedDate);
-    } else {
-      setTargetDateStr("2026-12-31");
-    }
+    const savedGoal = localStorage.getItem("myTargetGoal"); // 2. 保存された目標を読み込む
+    if (savedDate) setTargetDateStr(savedDate);
+    if (savedGoal) setTargetGoal(savedGoal);
+    if (!savedDate) setTargetDateStr("2026-12-31");
   }, []);
 
   useEffect(() => {
     if (!targetDateStr) return;
     localStorage.setItem("myTargetDate", targetDateStr);
+    localStorage.setItem("myTargetGoal", targetGoal); // 3. 目標が変わるたびに保存
+
     const calculateDays = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -34,7 +36,7 @@ export default function ChatPage() {
       setDaysLeft(diffDays);
     };
     calculateDays();
-  }, [targetDateStr]);
+  }, [targetDateStr, targetGoal]);
 
   const tags = [
     { icon: "💻", label: "開発" },
@@ -62,7 +64,8 @@ export default function ChatPage() {
         body: JSON.stringify({
           text: inputText,
           tag: selectedTag,
-          days_left: daysLeft
+          days_left: daysLeft,
+          target_goal: targetGoal // 4. AIに現在の目標を伝える
         }),
       });
 
@@ -85,20 +88,32 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       {/* 目標設定エリア */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border-t-4 border-blue-600">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <Link href="/" className="text-blue-500 text-sm font-bold">← TOP</Link>
           <div className="flex flex-col items-end">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Target Deadline</span>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Deadline</span>
             <input 
               type="date" 
               value={targetDateStr}
               onChange={(e) => setTargetDateStr(e.target.value)}
-              className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500 text-black bg-transparent"
+              className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500 text-black bg-transparent text-right"
             />
           </div>
         </div>
+
+        {/* 目標入力欄の追加 */}
+        <div className="mb-4">
+          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">Target Goal</span>
+          <input 
+            type="text" 
+            value={targetGoal}
+            onChange={(e) => setTargetGoal(e.target.value)}
+            placeholder="例：AWS SAA取得 / CyberAgent内定"
+            className="w-full text-sm font-bold border-b border-gray-100 focus:border-blue-500 focus:outline-none bg-transparent placeholder-gray-300"
+          />
+        </div>
         
-        <div className="text-center py-2">
+        <div className="text-center py-2 border-t border-gray-50 mt-2">
           <p className="text-xs text-gray-400 font-bold mb-1">目標達成まで</p>
           <div className="flex items-center justify-center gap-2">
             <span className="text-sm font-bold text-gray-600">残り</span>
@@ -146,7 +161,6 @@ export default function ChatPage() {
           ))
         )}
         
-        {/* ローディング表示 */}
         {isTyping && (
           <div className="flex flex-col items-start mb-4">
             <span className="text-[10px] text-gray-400 mb-1 font-bold">🤖 FUTURE ME</span>
