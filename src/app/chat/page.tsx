@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import ReactMarkdown from 'react-markdown';
+// 1. Rechartsのインポートを追加
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 
 export default function ChatPage() {
   const [inputText, setInputText] = useState("");
@@ -11,12 +13,15 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
 
   const [targetDateStr, setTargetDateStr] = useState("");
-  const [targetGoal, setTargetGoal] = useState(""); // 1. 目標テキスト用の状態
+  const [targetGoal, setTargetGoal] = useState("");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
+  
+  // 2. グラフデータを保持するステートを追加
+  const [chartData, setChartData] = useState<any[] | null>(null);
 
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
-    const savedGoal = localStorage.getItem("myTargetGoal"); // 2. 保存された目標を読み込む
+    const savedGoal = localStorage.getItem("myTargetGoal");
     if (savedDate) setTargetDateStr(savedDate);
     if (savedGoal) setTargetGoal(savedGoal);
     if (!savedDate) setTargetDateStr("2026-12-31");
@@ -25,7 +30,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!targetDateStr) return;
     localStorage.setItem("myTargetDate", targetDateStr);
-    localStorage.setItem("myTargetGoal", targetGoal); // 3. 目標が変わるたびに保存
+    localStorage.setItem("myTargetGoal", targetGoal);
 
     const calculateDays = () => {
       const today = new Date();
@@ -65,14 +70,29 @@ export default function ChatPage() {
           text: inputText,
           tag: selectedTag,
           days_left: daysLeft,
-          target_goal: targetGoal // 4. AIに現在の目標を伝える
+          target_goal: targetGoal
         }),
       });
 
       if (!response.ok) throw new Error("通信エラー");
 
       const data = await response.json();
-      const aiMsg = { text: data.response, tag: "🤖", sender: "ai" };
+      let aiResponseText = data.response;
+
+      // 3. AIの返信から <GRAPH_DATA> を抽出するロジック
+      const graphMatch = aiResponseText.match(/<GRAPH_DATA>([\s\S]*?)<\/GRAPH_DATA>/);
+      if (graphMatch) {
+        try {
+          const parsedData = JSON.parse(graphMatch[1]);
+          setChartData(parsedData); // グラフを更新
+          // 表示用のテキストからはタグ部分を削除
+          aiResponseText = aiResponseText.replace(/<GRAPH_DATA>[\s\S]*?<\/GRAPH_DATA>/, "").trim();
+        } catch (e) {
+          console.error("JSONのパースに失敗:", e);
+        }
+      }
+
+      const aiMsg = { text: aiResponseText, tag: "🤖", sender: "ai" };
       setMessages([...newMessages, aiMsg]);
 
     } catch (error) {
@@ -86,50 +106,72 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
-      {/* 目標設定エリア */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border-t-4 border-blue-600">
-        <div className="flex items-center justify-between mb-2">
-          <Link href="/" className="text-blue-500 text-sm font-bold">← TOP</Link>
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Deadline</span>
+      
+      {/* 4. 目標設定エリアを2カラムに修正 */}
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border-t-4 border-blue-600 grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        {/* 左側：目標入力と残り日数 */}
+        <div className="flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <Link href="/" className="text-blue-500 text-sm font-bold">← TOP</Link>
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Deadline</span>
+              <input 
+                type="date" 
+                value={targetDateStr}
+                onChange={(e) => setTargetDateStr(e.target.value)}
+                className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500 text-black bg-transparent text-right"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">Target Goal</span>
             <input 
-              type="date" 
-              value={targetDateStr}
-              onChange={(e) => setTargetDateStr(e.target.value)}
-              className="text-xs font-mono border-b border-gray-200 focus:outline-none focus:border-blue-500 text-black bg-transparent text-right"
+              type="text" 
+              value={targetGoal}
+              onChange={(e) => setTargetGoal(e.target.value)}
+              placeholder="例：AWS SAA取得"
+              className="w-full text-sm font-bold border-b border-gray-100 focus:border-blue-500 focus:outline-none bg-transparent placeholder-gray-300"
             />
+          </div>
+          
+          <div className="flex items-center gap-2 border-t border-gray-50 pt-2">
+            <span className="text-xs text-gray-400 font-bold">残り</span>
+            <span className={`text-3xl font-black ${daysLeft !== null && daysLeft < 0 ? 'text-red-500' : 'text-blue-600'}`}>
+              {daysLeft}
+            </span>
+            <span className="text-xs text-gray-400 font-bold">日</span>
           </div>
         </div>
 
-        {/* 目標入力欄の追加 */}
-        <div className="mb-4">
-          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">Target Goal</span>
-          <input 
-            type="text" 
-            value={targetGoal}
-            onChange={(e) => setTargetGoal(e.target.value)}
-            placeholder="例：AWS SAA取得 / CyberAgent内定"
-            className="w-full text-sm font-bold border-b border-gray-100 focus:border-blue-500 focus:outline-none bg-transparent placeholder-gray-300"
-          />
-        </div>
-        
-        <div className="text-center py-2 border-t border-gray-50 mt-2">
-          <p className="text-xs text-gray-400 font-bold mb-1">目標達成まで</p>
-          <div className="flex items-center justify-center gap-2">
-            <span className="text-sm font-bold text-gray-600">残り</span>
-            <span className={`text-4xl font-black ${daysLeft !== null && daysLeft < 0 ? 'text-red-500' : 'text-blue-600'}`}>
-              {daysLeft}
-            </span>
-            <span className="text-sm font-bold text-gray-600">日</span>
-          </div>
+        {/* 右側：レーダーチャート表示エリア */}
+        <div className="h-[200px] w-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
+          {chartData ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="65%" data={chartData}>
+                <PolarGrid stroke="#e5e7eb" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 9 }} />
+                <Radar
+                  name="Progress"
+                  dataKey="value"
+                  stroke="#2563eb"
+                  fill="#3b82f6"
+                  fillOpacity={0.5}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-[10px] text-gray-300 font-bold uppercase">Waiting for first report...</p>
+          )}
         </div>
       </div>
 
       {/* チャット表示エリア */}
-      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200">
+      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200 text-black">
         {messages.length === 0 ? (
           <div className="text-center mt-10">
-            <p className="text-gray-300 text-sm">目標を設定して、自分を追い込もう</p>
+            <p className="text-gray-300 text-sm font-bold">目標を設定して、自分を追い込もう</p>
           </div>
         ) : (
           messages.map((msg, index) => (
@@ -149,7 +191,7 @@ export default function ChatPage() {
                   <div className="whitespace-pre-wrap leading-relaxed">
                     <ReactMarkdown components={{
                       strong: ({node, ...props}) => <span className="font-bold" {...props} />
-                    }}>                     
+                    }}>                      
                       {msg.text}
                     </ReactMarkdown>
                   </div>
