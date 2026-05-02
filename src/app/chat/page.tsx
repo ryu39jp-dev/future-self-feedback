@@ -8,6 +8,7 @@ export default function ChatPage() {
   const [inputText, setInputText] = useState("");
   const [messages, setMessages] = useState<{ text: string; tag: string; sender: string }[]>([]);
   const [selectedTag, setSelectedTag] = useState("💻");
+  const [isTyping, setIsTyping] = useState(false);
 
   const [targetDateStr, setTargetDateStr] = useState("");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
@@ -50,15 +51,14 @@ export default function ChatPage() {
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInputText("");
+    setIsTyping(true);
 
     try {
       const endpoint = "https://sdgfilub3j.execute-api.ap-southeast-2.amazonaws.com/default/future-self-feedback";
       
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: inputText,
           tag: selectedTag,
@@ -69,7 +69,6 @@ export default function ChatPage() {
       if (!response.ok) throw new Error("通信エラー");
 
       const data = await response.json();
-      
       const aiMsg = { text: data.response, tag: "🤖", sender: "ai" };
       setMessages([...newMessages, aiMsg]);
 
@@ -77,6 +76,8 @@ export default function ChatPage() {
       console.error("Error:", error);
       const errorMsg = { text: "未来の自分との通信に失敗した。今は自力で耐えろ。", tag: "⚠️", sender: "ai" };
       setMessages([...newMessages, errorMsg]);
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -130,9 +131,10 @@ export default function ChatPage() {
                   : "bg-blue-600 text-white rounded-tr-none"
               }`}>
                 {msg.sender === "ai" ? (
-                  /* ReactMarkdown に className を渡さず、外側の div で制御 */
                   <div className="whitespace-pre-wrap leading-relaxed">
-                    <ReactMarkdown>
+                    <ReactMarkdown components={{
+                      strong: ({node, ...props}) => <span className="font-bold" {...props} />
+                    }}>                     
                       {msg.text}
                     </ReactMarkdown>
                   </div>
@@ -142,6 +144,18 @@ export default function ChatPage() {
               </div>
             </div>
           ))
+        )}
+        
+        {/* ローディング表示 */}
+        {isTyping && (
+          <div className="flex flex-col items-start mb-4">
+            <span className="text-[10px] text-gray-400 mb-1 font-bold">🤖 FUTURE ME</span>
+            <div className="bg-gray-800 p-3 rounded-2xl rounded-tl-none shadow-sm flex gap-1">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+            </div>
+          </div>
         )}
       </div>
 
