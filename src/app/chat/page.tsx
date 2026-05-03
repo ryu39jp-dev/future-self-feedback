@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import ReactMarkdown from 'react-markdown';
-// 1. Rechartsのインポートを追加
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 
 export default function ChatPage() {
@@ -16,8 +15,8 @@ export default function ChatPage() {
   const [targetGoal, setTargetGoal] = useState("");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   
-  // 2. グラフデータを保持するステートを追加
   const [chartData, setChartData] = useState<any[] | null>(null);
+  const [probability, setProbability] = useState<number | null>(null);
 
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
@@ -79,13 +78,13 @@ export default function ChatPage() {
       const data = await response.json();
       let aiResponseText = data.response;
 
-      // 3. AIの返信から <GRAPH_DATA> を抽出するロジック
       const graphMatch = aiResponseText.match(/<GRAPH_DATA>([\s\S]*?)<\/GRAPH_DATA>/);
       if (graphMatch) {
         try {
           const parsedData = JSON.parse(graphMatch[1]);
-          setChartData(parsedData); // グラフを更新
-          // 表示用のテキストからはタグ部分を削除
+          setChartData(parsedData.nodes); 
+          setProbability(parsedData.probability); 
+          
           aiResponseText = aiResponseText.replace(/<GRAPH_DATA>[\s\S]*?<\/GRAPH_DATA>/, "").trim();
         } catch (e) {
           console.error("JSONのパースに失敗:", e);
@@ -107,10 +106,10 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       
-      {/* 4. 目標設定エリアを2カラムに修正 */}
+      {/* 目標設定エリア */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border-t-4 border-blue-600 grid grid-cols-1 md:grid-cols-2 gap-4">
         
-        {/* 左側：目標入力と残り日数 */}
+        {/* 左側：目標入力、残り日数、合格確率 */}
         <div className="flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <Link href="/" className="text-blue-500 text-sm font-bold">← TOP</Link>
@@ -136,22 +135,43 @@ export default function ChatPage() {
             />
           </div>
           
-          <div className="flex items-center gap-2 border-t border-gray-50 pt-2">
-            <span className="text-xs text-gray-400 font-bold">残り</span>
-            <span className={`text-3xl font-black ${daysLeft !== null && daysLeft < 0 ? 'text-red-500' : 'text-blue-600'}`}>
-              {daysLeft}
-            </span>
-            <span className="text-xs text-gray-400 font-bold">日</span>
+          <div className="flex items-center gap-6 border-t border-gray-50 pt-2">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[9px] text-gray-400 font-bold">残り</span>
+              <span className={`text-3xl font-black ${daysLeft !== null && daysLeft < 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                {daysLeft}
+              </span>
+              <span className="text-[9px] text-gray-400 font-bold">日</span>
+            </div>
+
+            {/* 達成確率の表示 */}
+            {probability !== null && (
+              <div className="flex items-baseline gap-1 border-l pl-4 border-gray-100">
+                <span className="text-[9px] text-gray-400 font-bold">達成確率</span>
+                <div className="flex items-baseline">
+                  <span className={`text-3xl font-black ${
+                    probability > 70 ? 'text-green-500' : 
+                    probability > 40 ? 'text-orange-500' : 'text-red-500'
+                  }`}>
+                    {probability}
+                  </span>
+                  <span className={`text-sm font-bold ml-0.5 ${
+                    probability > 70 ? 'text-green-500' : 
+                    probability > 40 ? 'text-orange-500' : 'text-red-500'
+                  }`}>%</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 右側：レーダーチャート表示エリア */}
-        <div className="h-[200px] w-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
+        {/* 右側：レーダーチャート */}
+        <div className="h-[180px] w-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
           {chartData ? (
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="65%" data={chartData}>
+              <RadarChart cx="50%" cy="50%" outerRadius="60%" data={chartData}>
                 <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 9 }} />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 8 }} />
                 <Radar
                   name="Progress"
                   dataKey="value"
@@ -162,16 +182,16 @@ export default function ChatPage() {
               </RadarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-[10px] text-gray-300 font-bold uppercase">Waiting for first report...</p>
+            <p className="text-[10px] text-gray-300 font-bold uppercase">Waiting for report...</p>
           )}
         </div>
       </div>
 
       {/* チャット表示エリア */}
-      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200 text-black">
+      <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200 text-black font-sans">
         {messages.length === 0 ? (
           <div className="text-center mt-10">
-            <p className="text-gray-300 text-sm font-bold">目標を設定して、自分を追い込もう</p>
+            <p className="text-gray-300 text-sm font-bold tracking-widest uppercase">Target locked. Start reporting.</p>
           </div>
         ) : (
           messages.map((msg, index) => (
@@ -179,24 +199,22 @@ export default function ChatPage() {
               key={index} 
               className={`flex flex-col ${msg.sender === "ai" ? "items-start" : "items-end"}`}
             >
-              <span className="text-[10px] text-gray-400 mb-1 font-bold">
-                {msg.sender === "ai" ? "🤖 FUTURE ME" : msg.tag}
+              <span className="text-[9px] text-gray-400 mb-1 font-bold uppercase tracking-wider">
+                {msg.sender === "ai" ? "🤖 Future Analysis" : msg.tag}
               </span>
-              <div className={`p-3 rounded-2xl max-w-[80%] text-sm shadow-sm ${
+              <div className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
                 msg.sender === "ai" 
-                  ? "bg-gray-800 text-white rounded-tl-none prose prose-invert prose-sm" 
+                  ? "bg-gray-800 text-zinc-100 rounded-tl-none prose prose-invert prose-sm" 
                   : "bg-blue-600 text-white rounded-tr-none"
               }`}>
                 {msg.sender === "ai" ? (
                   <div className="whitespace-pre-wrap leading-relaxed">
-                    <ReactMarkdown components={{
-                      strong: ({node, ...props}) => <span className="font-bold" {...props} />
-                    }}>                      
+                    <ReactMarkdown>                      
                       {msg.text}
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  <div className="whitespace-pre-wrap font-medium">{msg.text}</div>
                 )}
               </div>
             </div>
@@ -205,11 +223,11 @@ export default function ChatPage() {
         
         {isTyping && (
           <div className="flex flex-col items-start mb-4">
-            <span className="text-[10px] text-gray-400 mb-1 font-bold">🤖 FUTURE ME</span>
+            <span className="text-[9px] text-gray-400 mb-1 font-bold">🤖 FUTURE ANALYSIS IN PROGRESS...</span>
             <div className="bg-gray-800 p-3 rounded-2xl rounded-tl-none shadow-sm flex gap-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+              <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></div>
+              <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+              <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
             </div>
           </div>
         )}
@@ -234,20 +252,20 @@ export default function ChatPage() {
       </div>
 
       {/* 入力フォーム */}
-      <div className="flex gap-2 bg-white p-2 rounded-xl shadow-lg border border-gray-200">
+      <div className="flex gap-2 bg-white p-2 rounded-xl shadow-lg border border-gray-200 mb-2">
         <input
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="今日の積み上げを報告..."
+          placeholder="今日の進捗を同期せよ..."
           className="flex-1 p-2 text-sm focus:outline-none text-black bg-transparent"
         />
         <button
           onClick={handleSend}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold active:scale-95 transition"
+          className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold active:scale-95 transition"
         >
-          送信
+          同期
         </button>
       </div>
     </div>
