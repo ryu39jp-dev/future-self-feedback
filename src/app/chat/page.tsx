@@ -18,11 +18,19 @@ export default function ChatPage() {
   const [chartData, setChartData] = useState<any[] | null>(null);
   const [probability, setProbability] = useState<number | null>(null);
 
+  // fixedSubjects はここで宣言する
+  const [fixedSubjects, setFixedSubjects] = useState<string[]>([]);
+
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
     const savedGoal = localStorage.getItem("myTargetGoal");
+    const savedSubjects = localStorage.getItem("myFixedSubjects");
+
     if (savedDate) setTargetDateStr(savedDate);
     if (savedGoal) setTargetGoal(savedGoal);
+    // 保存された項目があれば復元する
+    if (savedSubjects) setFixedSubjects(JSON.parse(savedSubjects));
+
     if (!savedDate) setTargetDateStr("2026-12-31");
   }, []);
 
@@ -69,7 +77,8 @@ export default function ChatPage() {
           text: inputText,
           tag: selectedTag,
           days_left: daysLeft,
-          target_goal: targetGoal
+          target_goal: targetGoal,
+          fixed_subjects: fixedSubjects // 保存済みの項目をAIに送る
         }),
       });
 
@@ -85,6 +94,13 @@ export default function ChatPage() {
           setChartData(parsedData.nodes); 
           setProbability(parsedData.probability); 
           
+          // 初回のみ：AIが決めた項目を固定して保存する
+          if (fixedSubjects.length === 0) {
+            const subjects = parsedData.nodes.map((n: any) => n.subject);
+            setFixedSubjects(subjects);
+            localStorage.setItem("myFixedSubjects", JSON.stringify(subjects));
+          }
+
           aiResponseText = aiResponseText.replace(/<GRAPH_DATA>[\s\S]*?<\/GRAPH_DATA>/, "").trim();
         } catch (e) {
           console.error("JSONのパースに失敗:", e);
@@ -103,13 +119,17 @@ export default function ChatPage() {
     }
   };
 
+  // 合格確率の色ロジックを変数にまとめる（DRY原則）
+  const probColor = probability !== null 
+    ? (probability > 70 ? 'text-green-500' : probability > 40 ? 'text-orange-500' : 'text-red-500')
+    : 'text-gray-400';
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 p-4 text-black">
       
       {/* 目標設定エリア */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border-t-4 border-blue-600 grid grid-cols-1 md:grid-cols-2 gap-4">
         
-        {/* 左側：目標入力、残り日数、合格確率 */}
         <div className="flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <Link href="/" className="text-blue-500 text-sm font-bold">← TOP</Link>
@@ -129,7 +149,12 @@ export default function ChatPage() {
             <input 
               type="text" 
               value={targetGoal}
-              onChange={(e) => setTargetGoal(e.target.value)}
+              onChange={(e) => {
+                setTargetGoal(e.target.value);
+                // 目標が変わったら項目もリセットする
+                setFixedSubjects([]);
+                localStorage.removeItem("myFixedSubjects");
+              }}
               placeholder="例：AWS SAA取得"
               className="w-full text-sm font-bold border-b border-gray-100 focus:border-blue-500 focus:outline-none bg-transparent placeholder-gray-300"
             />
@@ -144,28 +169,20 @@ export default function ChatPage() {
               <span className="text-[9px] text-gray-400 font-bold">日</span>
             </div>
 
-            {/* 達成確率の表示 */}
             {probability !== null && (
               <div className="flex items-baseline gap-1 border-l pl-4 border-gray-100">
-                <span className="text-[9px] text-gray-400 font-bold">達成確率</span>
+                <span className="text-[9px] text-gray-400 font-bold">合格確率</span>
                 <div className="flex items-baseline">
-                  <span className={`text-3xl font-black ${
-                    probability > 70 ? 'text-green-500' : 
-                    probability > 40 ? 'text-orange-500' : 'text-red-500'
-                  }`}>
+                  <span className={`text-3xl font-black ${probColor}`}>
                     {probability}
                   </span>
-                  <span className={`text-sm font-bold ml-0.5 ${
-                    probability > 70 ? 'text-green-500' : 
-                    probability > 40 ? 'text-orange-500' : 'text-red-500'
-                  }`}>%</span>
+                  <span className={`text-sm font-bold ml-0.5 ${probColor}`}>%</span>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* 右側：レーダーチャート */}
         <div className="h-[180px] w-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
           {chartData ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -187,7 +204,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* チャット表示エリア */}
       <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200 text-black font-sans">
         {messages.length === 0 ? (
           <div className="text-center mt-10">
@@ -195,23 +211,16 @@ export default function ChatPage() {
           </div>
         ) : (
           messages.map((msg, index) => (
-            <div 
-              key={index} 
-              className={`flex flex-col ${msg.sender === "ai" ? "items-start" : "items-end"}`}
-            >
+            <div key={index} className={`flex flex-col ${msg.sender === "ai" ? "items-start" : "items-end"}`}>
               <span className="text-[9px] text-gray-400 mb-1 font-bold uppercase tracking-wider">
                 {msg.sender === "ai" ? "🤖 Future Analysis" : msg.tag}
               </span>
               <div className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
-                msg.sender === "ai" 
-                  ? "bg-gray-800 text-zinc-100 rounded-tl-none prose prose-invert prose-sm" 
-                  : "bg-blue-600 text-white rounded-tr-none"
+                msg.sender === "ai" ? "bg-gray-800 text-zinc-100 rounded-tl-none prose prose-invert prose-sm" : "bg-blue-600 text-white rounded-tr-none"
               }`}>
                 {msg.sender === "ai" ? (
                   <div className="whitespace-pre-wrap leading-relaxed">
-                    <ReactMarkdown>                      
-                      {msg.text}
-                    </ReactMarkdown>
+                    <ReactMarkdown>{msg.text}</ReactMarkdown>
                   </div>
                 ) : (
                   <div className="whitespace-pre-wrap font-medium">{msg.text}</div>
@@ -233,16 +242,13 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* タグ選択 */}
       <div className="flex gap-2 mb-3 justify-center">
         {tags.map((t) => (
           <button
             key={t.icon}
             onClick={() => setSelectedTag(t.icon)}
             className={`flex flex-col items-center p-2 rounded-lg transition-all ${
-              selectedTag === t.icon 
-                ? "bg-blue-600 text-white scale-105 shadow-md" 
-                : "bg-white text-gray-400 hover:bg-gray-100"
+              selectedTag === t.icon ? "bg-blue-600 text-white scale-105 shadow-md" : "bg-white text-gray-400 hover:bg-gray-100"
             }`}
           >
             <span className="text-lg">{t.icon}</span>
@@ -251,7 +257,6 @@ export default function ChatPage() {
         ))}
       </div>
 
-      {/* 入力フォーム */}
       <div className="flex gap-2 bg-white p-2 rounded-xl shadow-lg border border-gray-200 mb-2">
         <input
           type="text"
