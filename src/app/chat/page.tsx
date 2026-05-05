@@ -3,7 +3,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import ReactMarkdown from 'react-markdown';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
+//  LineChart, Line などを追加
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+
+// 型定義の追加
+type HistoryPoint = {
+  date: string;
+  probability: number;
+};
 
 export default function ChatPage() {
   const [inputText, setInputText] = useState("");
@@ -18,18 +25,21 @@ export default function ChatPage() {
   const [chartData, setChartData] = useState<any[] | null>(null);
   const [probability, setProbability] = useState<number | null>(null);
 
-  // fixedSubjects はここで宣言する
   const [fixedSubjects, setFixedSubjects] = useState<string[]>([]);
+  
+  const [historyData, setHistoryData] = useState<HistoryPoint[]>([]);
 
   useEffect(() => {
     const savedDate = localStorage.getItem("myTargetDate");
     const savedGoal = localStorage.getItem("myTargetGoal");
     const savedSubjects = localStorage.getItem("myFixedSubjects");
+    //  履歴の復元
+    const savedHistory = localStorage.getItem("myProgressHistory");
 
     if (savedDate) setTargetDateStr(savedDate);
     if (savedGoal) setTargetGoal(savedGoal);
-    // 保存された項目があれば復元する
     if (savedSubjects) setFixedSubjects(JSON.parse(savedSubjects));
+    if (savedHistory) setHistoryData(JSON.parse(savedHistory));
 
     if (!savedDate) setTargetDateStr("2026-12-31");
   }, []);
@@ -78,7 +88,7 @@ export default function ChatPage() {
           tag: selectedTag,
           days_left: daysLeft,
           target_goal: targetGoal,
-          fixed_subjects: fixedSubjects // 保存済みの項目をAIに送る
+          fixed_subjects: fixedSubjects 
         }),
       });
 
@@ -94,12 +104,28 @@ export default function ChatPage() {
           setChartData(parsedData.nodes); 
           setProbability(parsedData.probability); 
           
-          // 初回のみ：AIが決めた項目を固定して保存する
           if (fixedSubjects.length === 0) {
             const subjects = parsedData.nodes.map((n: any) => n.subject);
             setFixedSubjects(subjects);
             localStorage.setItem("myFixedSubjects", JSON.stringify(subjects));
           }
+
+          //  履歴の上書き保存ロジック
+          const newProb = parsedData.probability;
+          const todayLabel = new Date().toLocaleDateString('ja-JP');
+
+          setHistoryData((prev) => {
+            const existingIndex = prev.findIndex((item) => item.date === todayLabel);
+            let updated;
+            if (existingIndex !== -1) {
+              updated = [...prev];
+              updated[existingIndex] = { ...updated[existingIndex], probability: newProb };
+            } else {
+              updated = [...prev, { date: todayLabel, probability: newProb }];
+            }
+            localStorage.setItem("myProgressHistory", JSON.stringify(updated));
+            return updated;
+          });
 
           aiResponseText = aiResponseText.replace(/<GRAPH_DATA>[\s\S]*?<\/GRAPH_DATA>/, "").trim();
         } catch (e) {
@@ -119,7 +145,6 @@ export default function ChatPage() {
     }
   };
 
-  // 合格確率の色ロジックを変数にまとめる（DRY原則）
   const probColor = probability !== null 
     ? (probability > 70 ? 'text-green-500' : probability > 40 ? 'text-orange-500' : 'text-red-500')
     : 'text-gray-400';
@@ -151,9 +176,11 @@ export default function ChatPage() {
               value={targetGoal}
               onChange={(e) => {
                 setTargetGoal(e.target.value);
-                // 目標が変わったら項目もリセットする
                 setFixedSubjects([]);
+                // ★目標変更時に履歴もリセット
+                setHistoryData([]);
                 localStorage.removeItem("myFixedSubjects");
+                localStorage.removeItem("myProgressHistory");
               }}
               placeholder="例：AWS SAA取得"
               className="w-full text-sm font-bold border-b border-gray-100 focus:border-blue-500 focus:outline-none bg-transparent placeholder-gray-300"
@@ -183,6 +210,7 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* レーダーチャート表示 */}
         <div className="h-[180px] w-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
           {chartData ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -204,7 +232,31 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* 追加：時系列推移グラフエリア */}
+      {historyData.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-3 mb-4 border border-gray-200 h-[150px]">
+          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block mb-2 text-center">Probability Trend</span>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={historyData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis dataKey="date" tick={{fontSize: 7, fill: '#9ca3af'}} />
+              <YAxis domain={[0, 100]} tick={{fontSize: 7, fill: '#9ca3af'}} />
+              <Tooltip contentStyle={{fontSize: '10px', borderRadius: '8px'}} />
+              <Line 
+                type="monotone" 
+                dataKey="probability" 
+                stroke="#2563eb" 
+                strokeWidth={2} 
+                dot={{ r: 3, fill: '#2563eb' }}
+                activeDot={{ r: 5 }} 
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="flex-1 bg-white rounded-lg shadow-inner mb-4 p-4 overflow-y-auto flex flex-col gap-3 border border-gray-200 text-black font-sans">
+        {/* ...（メッセージ表示部分は変更なしのため省略）... */}
         {messages.length === 0 ? (
           <div className="text-center mt-10">
             <p className="text-gray-300 text-sm font-bold tracking-widest uppercase">Target locked. Start reporting.</p>
