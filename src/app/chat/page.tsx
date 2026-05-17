@@ -107,6 +107,7 @@ export default function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          user_id: "ryu39-test",
           text: inputText,
           tag: selectedTag,
           days_left: daysLeft,
