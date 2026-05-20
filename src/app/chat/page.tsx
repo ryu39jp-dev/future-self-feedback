@@ -32,27 +32,79 @@ export default function ChatPage() {
   // ★ 1. まず先に activeGoal の定義を持ってくる
   const activeGoal = goals.find(g => g.id === activeGoalId) || null;
 
-  // ★ 2. 初期データ読み込み
+  // ★ 2. 初期データ読み込み（AWSのDynamoDBからデータを取得する）
   useEffect(() => {
-    const savedGoals = localStorage.getItem("multi_goal_data");
-    if (savedGoals) {
-      const parsed = JSON.parse(savedGoals);
-      setGoals(parsed);
-      if (parsed.length > 0) setActiveGoalId(parsed[0].id);
-    } else {
-      const initialGoal: Goal = {
-        id: "default",
-        title: localStorage.getItem("myTargetGoal") || "AWS SAA取得",
-        deadline: localStorage.getItem("myTargetDate") || "2026-12-31",
-        fixedSubjects: JSON.parse(localStorage.getItem("myFixedSubjects") || "[]"),
-        history: JSON.parse(localStorage.getItem("myProgressHistory") || "[]"),
-        messages: [],
-        chartData: null,
-        probability: null,
-      };
-      setGoals([initialGoal]);
-      setActiveGoalId(initialGoal.id);
-    }
+    const loadUserData = async () => {
+      try {
+        const endpoint = "https://sdgfilub3j.execute-api.ap-southeast-2.amazonaws.com/default/future-self-feedback";
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: "ryu39-test", // テスト用の固定ID
+            action: "load_data"    // Lambda側に読み込みモードだと伝える
+          }),
+        });
+
+        const resData = await response.json();
+        
+        if (resData.exists && resData.data) {
+          // --- AWSにデータが存在した場合 ---
+          const dbData = resData.data;
+          
+          // DynamoDBから降ってきたデータを元に、フロントの「Goal」型に復元する
+          // ※現状は1つの目標データが保存されている状態なので、それを配列の先頭に入れます
+          const loadedGoal: Goal = {
+            id: "default",
+            title: dbData.target_goal || "AWS SAA取得",
+            deadline: localStorage.getItem("myTargetDate") || "2026-12-31", // 日付はひとまずローカルから
+            fixedSubjects: [],
+            history: [],
+            messages: dbData.messages || [], // ここがDynamoDBのチャット履歴
+            chartData: null,
+            probability: null,
+          };
+          
+         
+          
+          setGoals([loadedGoal]);
+          setActiveGoalId(loadedGoal.id);
+
+        } else {
+          // --- AWSにまだデータがない場合、従来のローカルストレージ方式で初期化 ---
+          const savedGoals = localStorage.getItem("multi_goal_data");
+          if (savedGoals) {
+            const parsed = JSON.parse(savedGoals);
+            setGoals(parsed);
+            if (parsed.length > 0) setActiveGoalId(parsed[0].id);
+          } else {
+            const initialGoal: Goal = {
+              id: "default",
+              title: localStorage.getItem("myTargetGoal") || "AWS SAA取得",
+              deadline: localStorage.getItem("myTargetDate") || "2026-12-31",
+              fixedSubjects: JSON.parse(localStorage.getItem("myFixedSubjects") || "[]"),
+              history: JSON.parse(localStorage.getItem("myProgressHistory") || "[]"),
+              messages: [],
+              chartData: null,
+              probability: null,
+            };
+            setGoals([initialGoal]);
+            setActiveGoalId(initialGoal.id);
+          }
+        }
+      } catch (e) {
+        console.error("AWSからのデータ読み込みに失敗しました。ローカルストレージを使用します:", e);
+        // ネットワークエラー等のフォールバック
+        const savedGoals = localStorage.getItem("multi_goal_data");
+        if (savedGoals) {
+          const parsed = JSON.parse(savedGoals);
+          setGoals(parsed);
+          if (parsed.length > 0) setActiveGoalId(parsed[0].id);
+        }
+      }
+    };
+
+    loadUserData();
   }, []);
 
   // ★ 3. ローカルストレージへの同期
