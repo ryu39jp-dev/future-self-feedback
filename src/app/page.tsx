@@ -1,110 +1,51 @@
-'use client';
+"use client";
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../../firebase';
+// 💡 同じフォルダにあるので "../../" ではなく "./" に修正！
+import { auth, googleProvider } from './firebase'; 
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 🔥 本物のGoogleログインを呼び出す関数
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      // Firebaseを使ってGoogleログインのポップアップ画面を開く
+      setError(null);
+      // FirebaseのGoogleポップアップログインを実行
       const result = await signInWithPopup(auth, googleProvider);
-      // ユーザー情報が取れたら、ログイン成功！
       if (result.user) {
-        console.log('ログイン成功:', result.user.displayName);
-        // チャットページへ画面をジャンプさせる
+        // ログインが成功したらチャット画面（/chat）へ移動
         router.push('/chat');
       }
     } catch (err: any) {
-      console.error('ログインエラー:', err);
-      setError('ログインに失敗しました。もう一度お試しください。');
-    } finally {
-      setLoading(false);
+      console.error("Googleログインエラー:", err);
+      setError("ログインに失敗しました。もう一度お試しください。");
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      background: '#f8fafc',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
-      <div style={{ 
-        padding: '40px', 
-        background: '#fff', 
-        borderRadius: '24px', 
-        boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05)', 
-        border: '1px solid #e2e8f0',
-        textAlign: 'center',
-        width: '100%',
-        maxWidth: '380px'
-      }}>
-        {/* ロゴ・タイトル */}
-        <div style={{
-          width: '48px',
-          height: '48px',
-          background: '#000',
-          borderRadius: '12px',
-          margin: '0 auto 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          fontSize: '20px',
-          fontWeight: 'bold'
-        }}>
-          F
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 text-black p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100 max-w-sm w-full text-center space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-black tracking-tight">Future Self Sync</h1>
+          <p className="text-xs text-gray-400 font-medium">未来の自分と進捗を同期する</p>
         </div>
 
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#0f172a', marginBottom: '8px' }}>
-          Welcome back
-        </h1>
-        <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '32px' }}>
-          未来の自分からフィードバックを受け取ろう
-        </p>
-
-        {/* エラー表示 */}
         {error && (
-          <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '16px' }}>{error}</p>
+          <div className="bg-red-50 text-red-500 text-xs p-3 rounded-lg font-bold text-left">
+            {error}
+          </div>
         )}
 
-        {/* ログインボタン */}
-        <button 
+        <button
           onClick={handleGoogleLogin}
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            background: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '12px',
-            color: '#334155',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '12px',
-            transition: 'background 0.2s',
-            opacity: loading ? 0.7 : 1
-          }}
+          className="w-full flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-3 px-4 rounded-xl hover:bg-zinc-800 active:scale-[0.98] transition-all shadow-md text-sm"
         >
-          {/* GoogleのGっぽい仮アイコン */}
-          <span style={{ fontWeight: 'bold', color: '#4285F4', fontSize: '16px' }}>G</span>
-          {loading ? '接続中...' : 'Google アカウントでログイン'}
+          {/* GoogleっぽいGのロゴの代わりに絵文字にしています。必要に応じてGアイコン等に変えてください */}
+          <span>🔑</span>
+          Googleアカウントでログイン
         </button>
       </div>
     </div>

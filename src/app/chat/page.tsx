@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import ReactMarkdown from 'react-markdown';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { auth } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 // --- 型定義 ---
 type HistoryPoint = { date: string; probability: number };
@@ -20,6 +22,7 @@ type Goal = {
 };
 
 export default function ChatPage() {
+  const [userId, setUserId] = useState<string | null>(null); 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
@@ -29,11 +32,29 @@ export default function ChatPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ★ 1. まず先に activeGoal の定義を持ってくる
+  // activeGoal の定義
   const activeGoal = goals.find(g => g.id === activeGoalId) || null;
 
-  // ★ 2. 初期データ読み込み（AWSのDynamoDBからデータを取得する）
+  // ログインユーザーの監視
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId("guest");
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 初期データ読み込み（userId が変わったら古い画面データを破棄して再取得）
+  useEffect(() => {
+    if (!userId) return;
+
+    // 💡 アカウント切り替え時、前の人のデータが一瞬残るのを防ぐために初期化
+    setGoals([]);
+    setActiveGoalId(null);
+
     const loadUserData = async () => {
       try {
         const endpoint = "https://sdgfilub3j.execute-api.ap-southeast-2.amazonaws.com/default/future-self-feedback";
@@ -41,78 +62,61 @@ export default function ChatPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            user_id: "ryu39-test", // テスト用の固定ID
-            action: "load_data"    // Lambda側に読み込みモードだと伝える
+            user_id: userId, 
+            action: "load_data"
           }),
         });
 
         const resData = await response.json();
         
-        if (resData.exists && resData.data) {
-          // --- AWSにデータが存在した場合 ---
+        // 1. クラウド(DynamoDB)にマルチ目標データが存在する場合
+        if (resData.exists && Array.isArray(resData.goals) && resData.goals.length > 0) {
+          setGoals(resData.goals);
+          setActiveGoalId(resData.goals[0].id);
+        } 
+        // 2. クラウドに古い単一目標データしか残っていない場合の移行処理
+        else if (resData.exists && resData.data) {
           const dbData = resData.data;
-          
-          // DynamoDBから降ってきたデータを元に、フロントの「Goal」型に復元する
-          // ※現状は1つの目標データが保存されている状態なので、それを配列の先頭に入れます
           const loadedGoal: Goal = {
             id: "default",
             title: dbData.target_goal || "AWS SAA取得",
-            deadline: localStorage.getItem("myTargetDate") || "2026-12-31", // 日付はひとまずローカルから
+            deadline: "2026-12-31",
             fixedSubjects: [],
             history: [],
-            messages: dbData.messages || [], // ここがDynamoDBのチャット履歴
+            messages: dbData.messages || [],
             chartData: null,
             probability: null,
           };
-          
-         
-          
           setGoals([loadedGoal]);
           setActiveGoalId(loadedGoal.id);
-
-        } else {
-          // --- AWSにまだデータがない場合、従来のローカルストレージ方式で初期化 ---
-          const savedGoals = localStorage.getItem("multi_goal_data");
-          if (savedGoals) {
-            const parsed = JSON.parse(savedGoals);
-            setGoals(parsed);
-            if (parsed.length > 0) setActiveGoalId(parsed[0].id);
-          } else {
-            const initialGoal: Goal = {
-              id: "default",
-              title: localStorage.getItem("myTargetGoal") || "AWS SAA取得",
-              deadline: localStorage.getItem("myTargetDate") || "2026-12-31",
-              fixedSubjects: JSON.parse(localStorage.getItem("myFixedSubjects") || "[]"),
-              history: JSON.parse(localStorage.getItem("myProgressHistory") || "[]"),
-              messages: [],
-              chartData: null,
-              probability: null,
-            };
-            setGoals([initialGoal]);
-            setActiveGoalId(initialGoal.id);
-          }
+        } 
+        // 3. クラウドに何もデータがない完全新規ユーザーの場合
+        else {
+          // 💡 localStorage からの復元は完全に廃止し、クリーンな初期状態を生成
+          const initialGoal: Goal = {
+            id: "default",
+            title: "AWS SAA取得",
+            deadline: "2026-12-31",
+            fixedSubjects: [],
+            history: [],
+            messages: [],
+            chartData: null,
+            probability: null,
+          };
+          setGoals([initialGoal]);
+          setActiveGoalId(initialGoal.id);
         }
       } catch (e) {
-        console.error("AWSからのデータ読み込みに失敗しました。ローカルストレージを使用します:", e);
-        // ネットワークエラー等のフォールバック
-        const savedGoals = localStorage.getItem("multi_goal_data");
-        if (savedGoals) {
-          const parsed = JSON.parse(savedGoals);
-          setGoals(parsed);
-          if (parsed.length > 0) setActiveGoalId(parsed[0].id);
-        }
+        console.error("AWSからのデータ読み込みに失敗しました:", e);
       }
     };
 
     loadUserData();
-  }, []);
+  }, [userId]);
 
-  // ★ 3. ローカルストレージへの同期
-  useEffect(() => {
-    if (goals.length > 0) localStorage.setItem("multi_goal_data", JSON.stringify(goals));
-  }, [goals]);
+  // 💡 汚染の原因になる localStorage への自動同期の useEffect は丸ごと削除しました。
 
-  // ★ 4. 自動スクロール（activeGoal の定義より後に実行されるので安全）
+  // 自動スクロール
   useEffect(() => {
     if (currentView === "chat") {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -139,11 +143,16 @@ export default function ChatPage() {
     setCurrentView("chat");
   };
 
+  // メッセージ送信 ＆ クラウド完全強制同期
   const handleSend = async () => {
-    if (!inputText || !activeGoal) return;
+    if (!inputText || !activeGoal || !userId) return;
+    
     const userMsg = { text: inputText, tag: selectedTag, sender: "me" };
     const newMessages = [...activeGoal.messages, userMsg];
-    updateActiveGoal({ messages: newMessages });
+    
+    const updatedActiveBeforeAI = { ...activeGoal, messages: newMessages };
+    setGoals(prev => prev.map(g => g.id === activeGoalId ? updatedActiveBeforeAI : g));
+    
     setInputText("");
     setIsTyping(true);
     setCurrentView("chat");
@@ -155,11 +164,14 @@ export default function ChatPage() {
       const diffTime = new Date(activeGoal.deadline).getTime() - today.getTime();
       const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+      // 1. AIへのチャット送信
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "ryu39-test",
+          user_id: userId,
+          goal_id: activeGoal.id,
+          action: "send_message",
           text: inputText,
           tag: selectedTag,
           days_left: daysLeft,
@@ -193,17 +205,49 @@ export default function ChatPage() {
         aiResponseText = aiResponseText.replace(/<GRAPH_DATA>[\s\S]*?<\/GRAPH_DATA>/, "").trim();
       }
 
-      updateActiveGoal({
+      // 2. 新しいAIの返信を含んだアクティブ目標のオブジェクトを作成
+      const finalActiveGoal = {
+        ...activeGoal,
         messages: [...newMessages, { text: aiResponseText, tag: "🤖", sender: "ai" }],
         chartData: nextChartData,
         probability: nextProb,
         fixedSubjects: nextSubjects,
         history: nextHistory
+      };
+
+      // 3. 最新の全目標リストを作成
+      const nextGoals = goals.map(g => g.id === activeGoalId ? finalActiveGoal : g);
+      setGoals(nextGoals);
+
+      // 4. Lambda経由でDynamoDBに強制保存
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          action: "save_all_goals", 
+          goals: nextGoals          
+        }),
       });
-    } catch (e) { console.error(e); } finally { setIsTyping(false); }
+
+    } catch (e) { 
+      console.error("同期エラー:", e); 
+    } finally { 
+      setIsTyping(false); 
+    }
   };
 
-  if (!activeGoal) return null;
+  // 💡 データ読み込み待ちの間のローディング表示
+  if (goals.length === 0 || !activeGoal) {
+    return (
+      <div className="h-screen bg-gray-50 flex items-center justify-center text-black font-sans">
+        <div className="text-center">
+          <div className="text-2xl animate-spin mb-2">🔄</div>
+          <p className="text-xs font-bold text-gray-400 tracking-widest uppercase">Loading Secure Data...</p>
+        </div>
+      </div>
+    );
+  }
 
   const probColor = activeGoal.probability !== null 
     ? (activeGoal.probability > 70 ? 'text-green-500' : activeGoal.probability > 40 ? 'text-orange-500' : 'text-red-500')
@@ -247,7 +291,7 @@ export default function ChatPage() {
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         
-        {/* 【Aパターン】分析データタブ */}
+        {/* 分析データタブ */}
         {currentView === "dashboard" && (
           <div className="flex-1 overflow-y-auto space-y-4 pb-4 no-scrollbar">
             <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 grid grid-cols-1 gap-4">
@@ -283,7 +327,7 @@ export default function ChatPage() {
                 <div>
                   <span className="text-[9px] text-gray-400 font-bold block mb-0.5">現状診断</span>
                   <div className="text-xs font-bold mt-1.5">
-                    {activeGoal.probability && activeGoal.probability > 70 ? "🟢 順調" : activeGoal.probability && activeGoal.probability > 40 ? "🟡 要注意" : "🔴 危険"}
+                    {activeGoal.probability && activeGoal.probability > 70 ? "🟢 順順調" : activeGoal.probability && activeGoal.probability > 40 ? "🟡 要注意" : "🔴 危険"}
                   </div>
                 </div>
               </div>
@@ -323,7 +367,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* 【Bパターン】チャット履歴タブ */}
+        {/* チャット履歴タブ */}
         {currentView === "chat" && (
           <div className="flex-1 bg-white rounded-2xl shadow-inner p-4 overflow-y-auto border border-gray-100 flex flex-col gap-4 min-h-0">
             {activeGoal.messages.length === 0 ? (
@@ -357,7 +401,7 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* 5. 固定入力セクション */}
+      {/* 入力セクション */}
       <div className="space-y-2 mt-2 bg-gray-50 pt-1 flex-shrink-0">
         <div className="flex gap-3 justify-center">
           {[
