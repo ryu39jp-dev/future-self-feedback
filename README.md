@@ -4,22 +4,22 @@ Future Self Feedback System
 単なるタスク管理ではなく、目標に対する「達成確率」や「評価項目」を可視化し、日々の進捗をAIが客観的に査定・助言を行うことで長期的な目標達成をサポートします。
 
 2. 特徴
-未来の自分によるフィードバック: 日々の進捗を報告すると、AIが「未来の自分」の視点から具体的かつ励みになるアドバイスを生成。
+ 未来の自分によるフィードバック: 日々の進捗を報告すると、AIが「未来の自分」の視点から具体的かつ励みになるアドバイスを生成。
 
-進捗の定量化: フィードバック内容から、達成確率（0-100%）と5つのスキル項目を抽出し、グラフとして可視化。
+ 進捗の定量化: フィードバック内容から、達成確率（0-100%）と5つのスキル項目を抽出し、グラフとして可視化。
 
-継続支援: 目標ごとのメッセージ履歴を保存し、挫折しがちな長期目標のプロセスを記録。
+ 継続支援: 目標ごとのメッセージ履歴を保存し、挫折しがちな長期目標のプロセスを記録。
 
 3. 使用技術スタック
 サーバーレス構成による軽量・高効率な設計を採用しています。
 
-Frontend: React / Tailwind CSS
+ Frontend: React / Tailwind CSS
 
-Backend: AWS Lambda (Python)
+ Backend: AWS Lambda (Python)
 
-Database: Amazon DynamoDB
+ Database: Amazon DynamoDB
 
-AI Model: Amazon Bedrock (Anthropic Claude 3.5 Haiku)
+ AI Model: Amazon Bedrock (Anthropic Claude 4.5 Haiku)
 
 4. 開発の記録・想い
 本プロジェクトは、単にアプリを動かすこと以上に、「1から設計し、手を動かす過程」を大切にしました。
